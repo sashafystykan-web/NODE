@@ -150,6 +150,16 @@ def verify_reg_token(token):
         return row["user_id"]
 
 
+def peek_reg_token(token):
+    """Проверить токен без пометки 'использован' — безопасно для GET
+    (в т.ч. для автоматических запросов превью ссылки в мессенджере)."""
+    with db() as conn:
+        row = conn.execute("SELECT * FROM reg_tokens WHERE token = ?", (token,)).fetchone()
+        if row is None or row["used"] or row["expires_at"] < int(time.time()):
+            return None
+        return row["user_id"]
+
+
 # ---------- Майнинг (используется сайтом) ----------
 
 def get_mine_state(user_id):

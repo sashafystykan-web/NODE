@@ -6,6 +6,7 @@ from flask import Flask, request, redirect, session, jsonify, Response
 from db import (
     init_db,
     verify_reg_token,
+    peek_reg_token,
     get_or_create_user,
     get_mine_state,
     start_mining,
@@ -210,6 +211,40 @@ setInterval(refreshState, 1000);
 </html>"""
 
 
+CONFIRM_PAGE = """<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NODE</title>
+<style>
+  body{background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;
+       justify-content:center;height:100vh;margin:0;text-align:center;padding:24px}
+  .box{display:flex;flex-direction:column;gap:16px;align-items:center}
+  button{background:#fff;color:#000;border:none;padding:12px 28px;font-size:14px;font-weight:600;
+         border-radius:6px;cursor:pointer}
+  button[disabled]{opacity:.4;cursor:default}
+  p.err{color:rgba(255,255,255,.6);font-size:13px;display:none}
+</style></head>
+<body><div class="box">
+  <p>Привязать этот аккаунт к сайту?</p>
+  <button id="confirm">Подтвердить</button>
+  <p class="err" id="err">Ссылка уже использована или истекла. Получи новую командой /link у бота.</p>
+</div>
+<script>
+document.getElementById('confirm').addEventListener('click', async () => {
+  const btn = document.getElementById('confirm');
+  btn.disabled = true;
+  const r = await fetch('/register/confirm', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ token: "__TOKEN__" })
+  });
+  if (r.ok){ window.location.href = '/app'; }
+  else { document.getElementById('err').style.display = 'block'; btn.disabled = false; }
+});
+</script>
+</body></html>"""
+
+
 @app.route("/")
 def index():
     if "user_id" in session:
@@ -220,12 +255,24 @@ def index():
 @app.route("/register")
 def register():
     token = request.args.get("token", "")
-    user_id = verify_reg_token(token)
+    # Только проверяем — не гасим. Токен сжигается на подтверждении (POST),
+    # чтобы автоматическая генерация превью ссылки в мессенджере не убивала его раньше времени.
+    user_id = peek_reg_token(token)
     if user_id is None:
         return Response(ERROR_PAGE, status=400, mimetype="text/html")
+    return CONFIRM_PAGE.replace("__TOKEN__", token)
+
+
+@app.route("/register/confirm", methods=["POST"])
+def register_confirm():
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+    user_id = verify_reg_token(token)
+    if user_id is None:
+        return jsonify({"ok": False}), 400
     get_or_create_user(user_id, None)
     session["user_id"] = user_id
-    return redirect("/app")
+    return jsonify({"ok": True})
 
 
 @app.route("/app")

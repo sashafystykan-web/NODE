@@ -86,7 +86,13 @@ def cmd_link(message):
     get_or_create_user(message.from_user.id, message.from_user.username)
     token, _ = create_reg_token(message.from_user.id)
     url = f"{SITE_URL}/register?token={token}"
-    bot.send_message(message.chat.id, f"{url}\nСсылка действует 1 минуту.")
+    text = f"{url}\nСсылка действует 1 минуту."
+    try:
+        # На случай, если сам мессенджер делает GET по ссылке для превью —
+        # отключаем превью, чтобы это не расходовало токен раньше времени.
+        bot.send_message(message.chat.id, text, disable_web_page_preview=True)
+    except TypeError:
+        bot.send_message(message.chat.id, text)
 
 
 def run_polling():
